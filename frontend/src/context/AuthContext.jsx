@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 
@@ -8,7 +7,6 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
 
   // Check if user is logged in on mount
   useEffect(() => {
@@ -46,13 +44,7 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       toast.success('Login successful!');
 
-      // Navigate based on role
-      if (userData.role === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
-
+      // Return user data so component can handle navigation
       return userData;
     } catch (error) {
       const message = error.response?.data?.message || 'Login failed';
@@ -76,13 +68,7 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       toast.success('Registration successful!');
 
-      // Navigate based on role
-      if (userData.role === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
-
+      // Return user data so component can handle navigation
       return userData;
     } catch (error) {
       const message = error.response?.data?.message || 'Registration failed';
@@ -108,7 +94,6 @@ export const AuthProvider = ({ children }) => {
       
       setUser(null);
       toast.success('Logged out successfully');
-      navigate('/login');
     }
   };
 
