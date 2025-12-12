@@ -1,0 +1,248 @@
+@import "tailwindcss";
+
+@theme {
+  --color-crypto-dark: #0a0e27;
+  --color-crypto-darker: #060918;
+  --color-crypto-accent: #10b981;
+  --color-crypto-accent-dark: #059669;
+  --color-crypto-gold: #f59e0b;
+  --color-crypto-danger: #ef4444;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0e27;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #10b981;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #059669;
+}
+
+/* Global styles */
+body {
+  background-color: var(--color-crypto-darker);
+  color: rgb(243 244 246);
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Glassmorphism effect */
+.glass {
+  background-color: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Button styles */
+.btn-primary {
+  background-color: var(--color-crypto-accent);
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+  transform: scale(1);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-crypto-accent-dark);
+  transform: scale(1.05);
+}
+
+.btn-secondary {
+  background-color: rgb(55 65 81);
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: rgb(75 85 99);
+}
+
+.btn-danger {
+  background-color: var(--color-crypto-danger);
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-danger:hover {
+  background-color: rgb(220 38 38);
+}
+
+/* Input styles */
+.input-field {
+  width: 100%;
+  background-color: var(--color-crypto-dark);
+  border: 1px solid rgb(55 65 81);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  color: rgb(243 244 246);
+  transition: border-color 0.2s;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--color-crypto-accent);
+}
+
+/* Card styles */
+.card {
+  background-color: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+/* Badge styles */
+.badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-buy {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: var(--color-crypto-accent);
+}
+
+.badge-sell {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--color-crypto-danger);
+}
+
+.badge-hold {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: var(--color-crypto-gold);
+}
+
+/* Responsive Toast Container */
+.toast-container {
+  z-index: 9999;
+}
+
+/* Mobile adjustments for toasts */
+@media (max-width: 640px) {
+  /* Move toasts to top-center on mobile for better visibility */
+  .toast-container {
+    top: 4.5rem !important; /* Below navbar */
+    right: 0.75rem !important;
+    left: 0.75rem !important;
+    transform: none !important;
+  }
+  
+  /* Full width toasts on mobile */
+  .toast-container > div {
+    width: 100% !important;
+    max-width: calc(100vw - 1.5rem) !important;
+    margin: 0 auto !important;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .toast-container {
+    top: 5rem !important;
+    right: 1rem !important;
+  }
+  
+  .toast-container > div {
+    max-width: 400px !important;
+  }
+}
+
+/* Desktop */
+@media (min-width: 1025px) {
+  .toast-container > div {
+    max-width: 450px !important;
+  }
+}
+
+/* Smooth animations for toasts */
+@keyframes toast-enter {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-exit {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Mobile-specific animation */
+@media (max-width: 640px) {
+  @keyframes toast-enter {
+    from {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes toast-exit {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+  }
+}
+
+/* Safe area support for notched devices */
+@supports (padding: env(safe-area-inset-top)) {
+  .toast-container {
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
+}
