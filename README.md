@@ -779,5 +779,4 @@ Built for a Web3/crypto trading intelligence company internship
 
 - **API Documentation**: http://localhost:5000/api-docs
 - **Health Check**: http://localhost:5000/health
-#   C r y p t o - T r a d i n g - S i g n a l s - P l a t f o r m  
- 
+#
