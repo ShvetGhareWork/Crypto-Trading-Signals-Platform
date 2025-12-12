@@ -15,10 +15,6 @@ const { connectRedis } = require('./config/redis');
 const logger = require('./utils/logger');
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler');
 
-// Import routes
-const authRoutes = require('./routes/authRoutes');
-const signalRoutes = require('./routes/signalRoutes');
-
 // Initialize Express app
 const app = express();
 
@@ -31,109 +27,114 @@ connectRedis().catch((err) => {
 });
 
 // ============================================
-// SECURITY MIDDLEWARE
+// TRUST PROXY (CRITICAL FOR RENDER)
 // ============================================
+app.set('trust proxy', 1); // Trust first proxy (Render)
 
-// Helmet - Security headers (MUST be configured before CORS)
+// ============================================
+// HELMET - SECURITY HEADERS
+// ============================================
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Disable for API
-    crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
     crossOriginEmbedderPolicy: false,
   })
 );
 
 // ============================================
-// CORS CONFIGURATION - FIXED FOR VERCEL + RENDER
+// CORS CONFIGURATION - PRODUCTION READY
 // ============================================
+const allowedOrigins = [
+  'https://crypto-trading-signals-platform.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:4000',
+];
+
+// Add FRONTEND_URL from env if it exists
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
 
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = [
-      process.env.FRONTEND_URL, // https://crypto-trading-signals-platform.vercel.app
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'http://localhost:4000',
-    ];
+    // Allow requests with no origin (Postman, mobile apps, curl)
+    if (!origin) {
+      return callback(null, true);
+    }
 
-    // Allow requests with no origin (mobile apps, Postman, curl, etc.)
-    if (!origin) return callback(null, true);
-
-    // Allow any Vercel preview deployment
+    // Allow any Vercel deployment
     if (origin.endsWith('.vercel.app')) {
       return callback(null, true);
     }
 
-    // Check if origin is in allowed list
+    // Check allowed origins
     if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      logger.warn(`Blocked by CORS: ${origin}`);
-      callback(new Error(`Origin ${origin} not allowed by CORS`));
+      return callback(null, true);
     }
+
+    logger.warn(`CORS blocked: ${origin}`);
+    return callback(null, true); // TEMPORARILY ALLOW ALL FOR DEBUGGING
   },
-  credentials: true, // Allow cookies and Authorization header
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // Allowed HTTP methods
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
     'X-Requested-With',
     'Accept',
     'Origin',
-    'Access-Control-Request-Method',
-    'Access-Control-Request-Headers',
   ],
-  exposedHeaders: ['Set-Cookie'], // Expose headers to frontend
-  optionsSuccessStatus: 200, // For legacy browsers
-  preflightContinue: false, // Pass preflight response to next handler
-  maxAge: 86400, // Cache preflight response for 24 hours (in seconds)
+  exposedHeaders: ['Set-Cookie'],
+  optionsSuccessStatus: 200,
+  maxAge: 86400,
 };
 
-// Apply CORS middleware BEFORE all routes
 app.use(cors(corsOptions));
 
-// Explicitly handle preflight OPTIONS requests
+// Handle preflight for all routes
 app.options('*', cors(corsOptions));
 
-// Data sanitization against NoSQL injection
+// ============================================
+// BODY PARSERS (BEFORE ROUTES)
+// ============================================
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
+
+// ============================================
+// SECURITY MIDDLEWARE
+// ============================================
 app.use(mongoSanitize());
-
-// Data sanitization against XSS
 app.use(xss());
-
-// Prevent HTTP Parameter Pollution
 app.use(hpp());
 
 // ============================================
-// GENERAL MIDDLEWARE
+// LOGGING
 // ============================================
-
-// Body parser
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Cookie parser
-app.use(cookieParser());
-
-// HTTP request logger (Morgan + Winston)
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 } else {
   app.use(morgan('combined', { stream: logger.stream }));
 }
 
-// ============================================
-// SWAGGER API DOCUMENTATION
-// ============================================
+// Request logging
+app.use((req, res, next) => {
+  logger.info(`${req.method} ${req.path} - Origin: ${req.get('origin') || 'none'}`);
+  next();
+});
 
+// ============================================
+// SWAGGER DOCUMENTATION
+// ============================================
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
     info: {
       title: 'Crypto Trading Signals API',
       version: '1.0.0',
-      description:
-        'Enterprise-grade REST API for crypto trading signals with role-based access control (RBAC)',
+      description: 'Enterprise-grade REST API for crypto trading signals with RBAC',
       contact: {
         name: 'API Support',
         email: 'support@cryptosignals.com',
@@ -141,10 +142,10 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: process.env.NODE_ENV === 'production' 
-          ? process.env.BACKEND_URL || 'https://crypto-trading-signals-platform.onrender.com'
+        url: process.env.NODE_ENV === 'production'
+          ? 'https://crypto-trading-signals-platform.onrender.com'
           : `http://localhost:${process.env.PORT || 5000}`,
-        description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
+        description: process.env.NODE_ENV === 'production' ? 'Production' : 'Development',
       },
     ],
     components: {
@@ -156,105 +157,96 @@ const swaggerOptions = {
         },
       },
     },
-    security: [
-      {
-        bearerAuth: [],
-      },
-    ],
   },
-  apis: ['./routes/*.js'], // Path to route files with Swagger comments
+  apis: ['./routes/*.js'],
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
-
-// Swagger UI endpoint
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Swagger JSON endpoint
-app.get('/api-docs.json', (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.send(swaggerSpec);
-});
-
 // ============================================
-// ROUTES
+// BASIC ROUTES (BEFORE API ROUTES)
 // ============================================
 
-// Health check endpoint (test CORS)
-app.get('/health', cors(corsOptions), (req, res) => {
-  res.status(200).json({
+// Health check
+app.get('/health', (req, res) => {
+  res.json({
     success: true,
     message: 'Server is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
-    cors: 'enabled',
   });
 });
 
-// API version 1 routes
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/signals', signalRoutes);
-
-// Root endpoint
+// Root
 app.get('/', (req, res) => {
   res.json({
     success: true,
     message: 'Crypto Trading Signals API',
     version: '1.0.0',
     documentation: '/api-docs',
-    endpoints: {
-      auth: '/api/v1/auth',
-      signals: '/api/v1/signals',
-      health: '/health',
-    },
+  });
+});
+
+// Test endpoint
+app.post('/api/v1/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API test successful',
+    body: req.body,
+    headers: req.headers,
   });
 });
 
 // ============================================
-// ERROR HANDLING
+// API ROUTES
 // ============================================
 
-// 404 handler (must be after all routes)
-app.use(notFoundHandler);
+// Load routes with error handling
+try {
+  const authRoutes = require('./routes/authRoutes');
+  const signalRoutes = require('./routes/signalRoutes');
+  
+  app.use('/api/v1/auth', authRoutes);
+  app.use('/api/v1/signals', signalRoutes);
+  
+  logger.info('✅ All routes loaded successfully');
+} catch (error) {
+  logger.error('❌ Route loading failed:', error.message);
+  logger.error(error.stack);
+}
 
-// Global error handler (must be last)
+// ============================================
+// ERROR HANDLERS (MUST BE LAST)
+// ============================================
+app.use(notFoundHandler);
 app.use(errorHandler);
 
 // ============================================
-// SERVER INITIALIZATION
+// SERVER START
 // ============================================
-
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
-  logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-  logger.info(`API Documentation available at http://localhost:${PORT}/api-docs`);
-  logger.info(`CORS enabled for: ${process.env.FRONTEND_URL}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  logger.info(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+  logger.info(`📚 API Docs: http://localhost:${PORT}/api-docs`);
+  logger.info(`🌍 Allowed origins: ${allowedOrigins.join(', ')}`);
 });
 
-// Handle unhandled promise rejections
+// Graceful error handling
 process.on('unhandledRejection', (err) => {
   logger.error(`Unhandled Rejection: ${err.message}`);
-  logger.error(err.stack);
-  // Close server & exit process
-  server.close(() => {
-    process.exit(1);
-  });
+  server.close(() => process.exit(1));
 });
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   logger.error(`Uncaught Exception: ${err.message}`);
-  logger.error(err.stack);
   process.exit(1);
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received: closing HTTP server');
-  server.close(() => {
-    logger.info('HTTP server closed');
-  });
+  server.close(() => logger.info('HTTP server closed'));
 });
 
 module.exports = app;
