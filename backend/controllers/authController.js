@@ -3,7 +3,6 @@ const {
   generateTokenPair,
   verifyToken,
   blacklistToken,
-  extractRefreshToken,
   getTokenExpiry,
 } = require('../services/authService');
 const {
@@ -16,14 +15,11 @@ const asyncHandler = require('../utils/asyncHandler');
 const logger = require('../utils/logger');
 
 /**
- * Cookie options for JWT tokens
+ * Extract refresh token from request body or headers
  */
-const getCookieOptions = () => ({
-  httpOnly: true, // Prevents XSS attacks
-  secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-  sameSite: 'strict', // CSRF protection
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-});
+const extractRefreshToken = (req) => {
+  return req.body.refreshToken || req.headers['x-refresh-token'];
+};
 
 /**
  * @route   POST /api/v1/auth/register
@@ -53,16 +49,9 @@ const register = asyncHandler(async (req, res) => {
   // Save refresh token to user document
   await user.addRefreshToken(refreshToken);
 
-  // Set tokens in httpOnly cookies
-  res.cookie('accessToken', accessToken, {
-    ...getCookieOptions(),
-    maxAge: 15 * 60 * 1000, // 15 minutes
-  });
-
-  res.cookie('refreshToken', refreshToken, getCookieOptions());
-
   logger.info(`New user registered: ${email}`);
 
+  // CHANGED: Return tokens in response body, not cookies
   return successResponse(res, 201, 'User registered successfully', {
     user: user.profile,
     tokens: {
@@ -110,16 +99,9 @@ const login = asyncHandler(async (req, res) => {
   user.lastLogin = new Date();
   await user.save();
 
-  // Set tokens in httpOnly cookies
-  res.cookie('accessToken', accessToken, {
-    ...getCookieOptions(),
-    maxAge: 15 * 60 * 1000, // 15 minutes
-  });
-
-  res.cookie('refreshToken', refreshToken, getCookieOptions());
-
   logger.info(`User logged in: ${email}`);
 
+  // CHANGED: Return tokens in response body, not cookies
   return successResponse(res, 200, 'Login successful', {
     user: user.profile,
     tokens: {
@@ -135,6 +117,7 @@ const login = asyncHandler(async (req, res) => {
  * @access  Public
  */
 const refreshAccessToken = asyncHandler(async (req, res) => {
+  // CHANGED: Get refresh token from request body
   const refreshToken = extractRefreshToken(req);
 
   if (!refreshToken) {
@@ -163,16 +146,9 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   await user.removeRefreshToken(refreshToken);
   await user.addRefreshToken(newRefreshToken);
 
-  // Set new tokens in cookies
-  res.cookie('accessToken', accessToken, {
-    ...getCookieOptions(),
-    maxAge: 15 * 60 * 1000,
-  });
-
-  res.cookie('refreshToken', newRefreshToken, getCookieOptions());
-
   logger.info(`Access token refreshed for user: ${user.email}`);
 
+  // CHANGED: Return tokens in response body
   return successResponse(res, 200, 'Token refreshed successfully', {
     tokens: {
       accessToken,
@@ -187,10 +163,11 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
  * @access  Private
  */
 const logout = asyncHandler(async (req, res) => {
+  // CHANGED: Get refresh token from request body
   const refreshToken = extractRefreshToken(req);
 
   // Blacklist access token
-  const accessToken = req.cookies.accessToken || req.headers.authorization?.substring(7);
+  const accessToken = req.headers.authorization?.split(' ')[1];
   if (accessToken) {
     const expiry = getTokenExpiry(accessToken);
     await blacklistToken(accessToken, expiry);
@@ -203,10 +180,6 @@ const logout = asyncHandler(async (req, res) => {
       await user.removeRefreshToken(refreshToken);
     }
   }
-
-  // Clear cookies
-  res.clearCookie('accessToken');
-  res.clearCookie('refreshToken');
 
   logger.info(`User logged out: ${req.user?.email || 'Unknown'}`);
 
@@ -229,15 +202,11 @@ const logoutAll = asyncHandler(async (req, res) => {
   await user.removeAllRefreshTokens();
 
   // Blacklist current access token
-  const accessToken = req.cookies.accessToken || req.headers.authorization?.substring(7);
+  const accessToken = req.headers.authorization?.split(' ')[1];
   if (accessToken) {
     const expiry = getTokenExpiry(accessToken);
     await blacklistToken(accessToken, expiry);
   }
-
-  // Clear cookies
-  res.clearCookie('accessToken');
-  res.clearCookie('refreshToken');
 
   logger.info(`User logged out from all devices: ${user.email}`);
 

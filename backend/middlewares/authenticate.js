@@ -7,15 +7,10 @@ const logger = require('../utils/logger');
 /**
  * Authentication Middleware
  * Verifies JWT token and attaches user to request object
- * 
- * Usage:
- * router.get('/protected', authenticate, (req, res) => {
- *   // req.user is available here
- * });
  */
 const authenticate = async (req, res, next) => {
   try {
-    // Extract token from request
+    // Extract token from Authorization header
     const token = extractToken(req);
 
     if (!token) {
@@ -76,15 +71,13 @@ const authenticate = async (req, res, next) => {
 
 /**
  * Optional Authentication Middleware
- * Attaches user if token is valid, but doesn't fail if no token
- * Useful for endpoints that have different behavior for authenticated users
  */
 const optionalAuthenticate = async (req, res, next) => {
   try {
     const token = extractToken(req);
 
     if (!token) {
-      return next(); // No token, continue without user
+      return next();
     }
 
     const decoded = await verifyToken(token, 'access');
@@ -98,7 +91,6 @@ const optionalAuthenticate = async (req, res, next) => {
 
     next();
   } catch (error) {
-    // Silently fail and continue without user
     logger.warn(`Optional authentication failed: ${error.message}`);
     next();
   }

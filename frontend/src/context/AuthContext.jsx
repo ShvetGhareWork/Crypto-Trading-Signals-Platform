@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 
@@ -7,16 +8,27 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   // Check if user is logged in on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('accessToken');
+    const loadUser = () => {
+      try {
+        const storedUser = localStorage.getItem('user');
+        const accessToken = localStorage.getItem('accessToken');
 
-    if (storedUser && token) {
-      setUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
+        if (storedUser && accessToken) {
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (error) {
+        console.error('Failed to load user:', error);
+        localStorage.clear();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUser();
   }, []);
 
   const login = async (email, password) => {
@@ -24,15 +36,27 @@ export const AuthProvider = ({ children }) => {
       const { data } = await api.post('/auth/login', { email, password });
       
       const userData = data.data.user;
-      const accessToken = data.data.tokens.accessToken;
+      const { accessToken, refreshToken } = data.data.tokens;
 
+      // Store in localStorage
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      
       setUser(userData);
-
       toast.success('Login successful!');
+
+      // Navigate based on role
+      if (userData.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
+
       return userData;
     } catch (error) {
+      const message = error.response?.data?.message || 'Login failed';
+      toast.error(message);
       throw error;
     }
   };
@@ -42,29 +66,49 @@ export const AuthProvider = ({ children }) => {
       const { data } = await api.post('/auth/register', { name, email, password });
       
       const userData = data.data.user;
-      const accessToken = data.data.tokens.accessToken;
+      const { accessToken, refreshToken } = data.data.tokens;
 
+      // Store in localStorage
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      
       setUser(userData);
-
       toast.success('Registration successful!');
+
+      // Navigate based on role
+      if (userData.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
+
       return userData;
     } catch (error) {
+      const message = error.response?.data?.message || 'Registration failed';
+      toast.error(message);
       throw error;
     }
   };
 
   const logout = async () => {
     try {
-      await api.post('/auth/logout');
+      const refreshToken = localStorage.getItem('refreshToken');
+      
+      // Call backend logout
+      await api.post('/auth/logout', { refreshToken });
+      
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      // Clear localStorage regardless
       localStorage.removeItem('user');
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      
       setUser(null);
       toast.success('Logged out successfully');
+      navigate('/login');
     }
   };
 

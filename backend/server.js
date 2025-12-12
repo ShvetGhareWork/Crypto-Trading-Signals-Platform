@@ -77,7 +77,7 @@ const corsOptions = {
     logger.warn(`CORS blocked: ${origin}`);
     return callback(null, true); // TEMPORARILY ALLOW ALL FOR DEBUGGING
   },
-  credentials: true,
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
