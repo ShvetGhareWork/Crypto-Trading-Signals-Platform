@@ -34,39 +34,66 @@ connectRedis().catch((err) => {
 // SECURITY MIDDLEWARE
 // ============================================
 
-// Helmet - Security headers
+// Helmet - Security headers (MUST be configured before CORS)
 app.use(
   helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-      },
-    },
+    contentSecurityPolicy: false, // Disable for API
+    crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin
+    crossOriginEmbedderPolicy: false,
   })
 );
 
-// CORS configuration
+// ============================================
+// CORS CONFIGURATION - FIXED FOR VERCEL + RENDER
+// ============================================
+
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
-      process.env.FRONTEND_URL,
+      process.env.FRONTEND_URL, // https://crypto-trading-signals-platform.vercel.app
       'http://localhost:5173',
       'http://localhost:3000',
+      'http://localhost:4000',
     ];
 
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (mobile apps, Postman, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    // Allow any Vercel preview deployment
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      logger.warn(`Blocked by CORS: ${origin}`);
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
     }
   },
-  credentials: true, // Allow cookies
-  optionsSuccessStatus: 200,
+  credentials: true, // Allow cookies and Authorization header
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // Allowed HTTP methods
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers',
+  ],
+  exposedHeaders: ['Set-Cookie'], // Expose headers to frontend
+  optionsSuccessStatus: 200, // For legacy browsers
+  preflightContinue: false, // Pass preflight response to next handler
+  maxAge: 86400, // Cache preflight response for 24 hours (in seconds)
 };
 
+// Apply CORS middleware BEFORE all routes
 app.use(cors(corsOptions));
+
+// Explicitly handle preflight OPTIONS requests
+app.options('*', cors(corsOptions));
 
 // Data sanitization against NoSQL injection
 app.use(mongoSanitize());
@@ -114,12 +141,10 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: `http://localhost:${process.env.PORT || 5000}`,
-        description: 'Development server',
-      },
-      {
-        url: 'https://api.cryptosignals.com',
-        description: 'Production server',
+        url: process.env.NODE_ENV === 'production' 
+          ? process.env.BACKEND_URL || 'https://crypto-trading-signals-platform.onrender.com'
+          : `http://localhost:${process.env.PORT || 5000}`,
+        description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
       },
     ],
     components: {
@@ -155,13 +180,14 @@ app.get('/api-docs.json', (req, res) => {
 // ROUTES
 // ============================================
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+// Health check endpoint (test CORS)
+app.get('/health', cors(corsOptions), (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Server is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
+    cors: 'enabled',
   });
 });
 
@@ -203,6 +229,7 @@ const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
   logger.info(`API Documentation available at http://localhost:${PORT}/api-docs`);
+  logger.info(`CORS enabled for: ${process.env.FRONTEND_URL}`);
 });
 
 // Handle unhandled promise rejections
